@@ -9,8 +9,8 @@ There are a few ways Java can figure out where your KDC is:
     - be told where krb5.conf is via jvm argument
         "java.security.krb5.conf=krb5.conf"
     - be told where the kdc is directly via jvm argument
-        "java.security.krb5.kdc=usdenprh354.arrow.com"
-        "java.security.krb5.realm=CLOUDERA.ARROW.COM"
+        "java.security.krb5.kdc=myhost.com"
+        "java.security.krb5.realm=EXAMPLE.COM
 
     we can then accept an argument for:
         krb5_conf
@@ -36,12 +36,18 @@ chain of classes:
 
     see: https://github.com/apache/hadoop/blob/a89ca56a1b0eb949f56e7c6c5c25fdf87914a02f/hadoop-common-project/hadoop-common/src/test/java/org/apache/hadoop/security/TestUGILoginFromKeytab.java
 """
+
+__all__ = ['kerberos_login_keytab', 'configure_jaas', 'realm_from_principal']
+
+import logging
 from os.path import join
-import getpass
 import tempfile
 from jpype import JClass
+import binascii
 
 from pyjdbc.java import Jvm, System
+
+log = logging.getLogger(__name__)
 
 USER_GROUP_CLASS = 'org.apache.hadoop.security.UserGroupInformation'
 KERBEROS_SECURITY = 'kerberos'
@@ -90,6 +96,8 @@ def configure_jaas(jaas_path=None,
     """
     Configures and sets a jaas configuration at runtime
 
+    The configuration file is saved to <temp>
+
     :param jaas_path: file path where the jaas file will be written
     :param use_password: use the password defined in javax.security.auth.login.password
     :param principal: set the user principal to use in jaas
@@ -98,12 +106,8 @@ def configure_jaas(jaas_path=None,
     :param ticket_cache: use the default ticket cache
     :return:
     """
-    tempdir = tempfile.gettempdir()
-    if not jaas_path:
-        jaas_path = join(tempdir, 'pyjdbc-jaas-{}.conf'.format(getpass.getuser()))
-
     lines = []
-    lines.append('com.sun.security.auth.module.Krb5LoginModule optional')
+    lines.append('com.sun.security.auth.module.Krb5LoginModule required')
     if keytab:
         lines.append('keyTab="{}"'.format(keytab))
     if principal:
@@ -124,7 +128,12 @@ def configure_jaas(jaas_path=None,
     lines.insert(0, 'com.sun.security.jgss.krb5.initiate {')
     lines.append('};')
 
-    #print('JAAS CONFIG\n', '\n'.join(lines))
+    jaas_text = '\n'.join(lines)
+    tempdir = tempfile.gettempdir()
+    if not jaas_path:
+        jaas_path = join(tempdir, 'pyjdbc-jaas-{}.conf'.format(binascii.crc32(jaas_text)))
+
+    log.debug('jaas configuration: {}\n{}'.format(jaas_path, jaas_text))
 
     with open(jaas_path, 'w') as fp:
         fp.writelines(lines)

@@ -9,25 +9,6 @@ import jpype.imports
 from pyjdbc.java import Classpath
 
 
-def deco(name=None):
-
-    def wrapper(func):
-        import inspect
-        print(inspect.getfullargspec(func).args)
-        print('>>>> NAME:', name)
-        print('>>>>', func.__name__)
-        return func
-
-    return wrapper
-
-
-class HiveConnectFn:
-
-    @deco(name='asdf')
-    def fancy_function(self):
-        pass
-
-
 class TestClasspath(unittest.TestCase):
 
     def test_jar_load(self):
@@ -36,9 +17,3 @@ class TestClasspath(unittest.TestCase):
         # fileName can be :memory:
         con = SQLiteConnection('jdbc:sqlite', ':memory:')
         stmt = con.createStatement()
-
-    def test_arg_spec(self):
-        hive = HiveConnectFn()
-        hive.fancy_function()
-
-

@@ -54,7 +54,7 @@ class Properties:
         jprops = JProperties()
         for k, v in dictionary.items():
             if not isinstance(k, str):
-                raise ValueError(f'[{cls.PROPERTIES_CLASS}] keys must be strings, got: {type(k)}')
+                raise ValueError('[{}] keys must be strings, got: {}'.format(cls.PROPERTIES_CLASS, type(k)))
             jprops.setProperty(k, v)
 
         return jprops

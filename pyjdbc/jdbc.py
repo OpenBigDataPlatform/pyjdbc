@@ -73,7 +73,7 @@ class DriverManager:
 
         creds = (self._username, self._password)
         if self._properties:
-            self._log.debug(f'using signature: DriverManager.getConnection(String url, Properties info)')
+            self._log.debug('using signature: DriverManager.getConnection(String url, Properties info)')
 
             # convert property dictionary into java Properties object
             properties = Properties.from_dict(self._properties)
@@ -81,12 +81,12 @@ class DriverManager:
 
         # Signature 2
         elif self._url and creds:
-            self._log.debug(f'using signature: DriverManager.getConnection(String url, String user, String password)')
+            self._log.debug('using signature: DriverManager.getConnection(String url, String user, String password)')
             java_connection = JDriverManager.getConnection(self._url, self._username, self._password)
 
         # Signature 3
         else:
-            self._log.debug(f'using signature: DriverManager.getConnection(String url)')
+            self._log.debug('using signature: DriverManager.getConnection(String url)')
             java_connection = JDriverManager.getConnection(self._url)
 
         return java_connection

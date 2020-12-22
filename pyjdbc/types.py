@@ -93,7 +93,7 @@ class JdbcType:
     @fn.setter
     def fn(self, fn):
         if not callable(fn):
-            raise ValueError(f'"fn" must be callable, got: {type(fn)}')
+            raise ValueError('"fn" must be callable, got: {}'.format(type(fn)))
         self._fn = fn
 
     @property

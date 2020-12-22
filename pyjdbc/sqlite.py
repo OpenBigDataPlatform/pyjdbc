@@ -1,3 +1,11 @@
+"""
+sqlite module for pyjdbc
+
+This module is for testing basic pyjdbc functionality and should NOT be used to actually interact with sqlite
+The built-in sqlite library for Python should ALWAYS be preferred.
+"""
+__all__ = ['connect']
+
 from pyjdbc.connect import ArgumentParser, ArgumentOpts, ConnectFunction, ConnectArguments
 from pyjdbc.java import Properties
 from pyjdbc.dbapi import JdbcConnection, JdbcCursor
@@ -5,12 +13,20 @@ from jpype import JClass
 
 
 class SqliteArgParser(ArgumentParser):
-    file_name = ArgumentOpts(position=0, argtype=str, mandatory=True)
+    """
+    Sqlite connection arguments and rules
+    """
+    file_name = ArgumentOpts(position=0, argtype=str, description='sqlite database file path, or ":memory:"')
+    driver = ArgumentOpts(argtype=str, description='path to sqlite jdbc driver jar')
     properties = ArgumentOpts(argtype=dict, default={})
 
 
 class SqliteConnect(ConnectFunction):
     SQLITE_URL = 'jdbc:sqlite'
+
+    def handle_args(self, arguments: ConnectArguments):
+        if arguments.get('driver'):
+            self.driver_path = arguments.driver
 
     def get_connection(self, driver_class: JClass, args: ConnectArguments):
         SQLiteConnection = driver_class

@@ -35,6 +35,10 @@ class ArgumentOpts:
         if position is not None and not isinstance(position, int):
             raise ValueError('{}: position must be `None` or `int`, got: {}'.format(name, type(position)))
 
+        # positional arguments are mandatory
+        if position is not None:
+            mandatory=True
+
         if excludes is None:
             excludes = []
 
@@ -189,6 +193,7 @@ class ArgumentParser:
                                  'these positions are missing: {}'.format(list(non_sequential)))
 
     def _parse_args(self, *args, **kwargs):
+        # TODO test for non-existant fields in requires, and excludes
         if self._position_args:
             num_positional_args = max(self._position_args.keys()) + 1
         else:
@@ -205,7 +210,7 @@ class ArgumentParser:
                 valid_keywords = '\n'.join(self._named_args)
                 raise ValueError('invalid keyword argument: "{}", valid names:\n{}'.format(name, valid_keywords))
             if name in pos_values:
-                raise ValueError('argument defined by position and by name: "{}"'.format(name))
+                raise ValueError('argument repeated by position and keyword: "{}"'.format(name))
             keyword_values[name] = value
 
         keyword_values.update(pos_values)
@@ -215,8 +220,6 @@ class ArgumentParser:
         missing = set(mandatory) - set(keyword_values)
         if missing:
             missing_str = '\n'.join(missing)
-            mandatory_str = '\n'.join(mandatory)
-            valid_str = '\n'.join(self._named_args)
             raise ValueError('required arguments missing:\n{}\n'
                              'note that all positional arguments are mandatory'.format(
                                  textwrap.indent(missing_str, ' '*4)))
@@ -242,7 +245,7 @@ class ArgumentParser:
                 ))
 
         # check for includes/excludes
-        for name in keyword_values.keys():
+        for name in keyword_values:
             requires = self._named_args[name].requires
             excludes = self._named_args[name].excludes
 
@@ -284,6 +287,17 @@ class ArgumentParser:
                     ))
 
             keyword_values[name] = new_value
+
+        for name, value in keyword_values.items():
+            arg = self._named_args[name]
+            if not arg.choices:
+                continue
+            if value not in arg.choices:
+                raise ValueError('argument "{}" value "{}" invalid, must be one of: ({})'.format(
+                    name,
+                    value,
+                    ', '.join(arg.choices)
+                ))
 
         return keyword_values
 

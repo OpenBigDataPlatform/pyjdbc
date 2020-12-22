@@ -1,4 +1,4 @@
-from pyjdbc.jpypeutil import start_jvm
+from pyjdbc.java import Jvm
 
 try:
     import faulthandler
@@ -8,4 +8,4 @@ try:
 except Exception:
     pass
 
-start_jvm()
+Jvm.start()

@@ -37,7 +37,7 @@ jobs:
     # Install the JVM which is required by hivejdbc and pytest
     - name: Install JVM
       run: |
-        sudo apt install default-jre
+        sudo apt -y install default-jre
     # -----------------------------------------
     # run test suite using `pytest` and generate coverage report.
     # see pytest.ini for cli options automatically passed to `pytest`

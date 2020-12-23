@@ -2,14 +2,14 @@ from setuptools import setup
 
 setup(
     name='pyjdbc',
-    version='0.1.3',
+    version='0.1.4',
     author='OpenBigDataPlatform',
     license='Apache-2.0',
     url='https://github.com/OpenBigDataPlatform/pyjdbc',
-    description=('Use JDBC drivers to provide DB API 2.0 python database interface'),
+    description='Use JDBC drivers to provide DB API 2.0 python database interface',
     long_description=open('README.md').read(),
     long_description_content_type='text/markdown',
-    keywords=('dbapi jdbc'),
+    keywords='dbapi jdbc',
     classifiers=[
         'Development Status :: 4 - Beta',
         'Intended Audience :: Developers',

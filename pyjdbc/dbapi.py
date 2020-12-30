@@ -3,7 +3,11 @@ dbapi.py - this module stores the base classes for Cursors, and Connection objec
 Also known as Pep 249 - https://www.python.org/dev/peps/pep-0249/
 """
 __all__ = ['JdbcConnection', 'JdbcCursor', 'JdbcDictCursor']
-from jpype import JClass
+from collections.abc import Iterable, Sequence
+from jpype import JClass, JString, JDouble, JInt, JBoolean, JByte, JLong, JArray
+import sqlparams
+import textwrap
+from copy import copy
 
 from pyjdbc.types import JdbcTypeConversion
 from pyjdbc.exceptions import (Error,
@@ -110,6 +114,13 @@ class JdbcCursor:
 
     @property
     def column_names(self):
+        """
+        By default jdbc drivers return prefixed column names
+
+        Returns non-prefixed column names, preserves prefix only when ambiguity exists
+
+        :return:
+        """
         if not self._metadata:
             return None
 
@@ -237,7 +248,84 @@ class JdbcCursor:
         except Exception:
             return ''
 
+    def _check_params(self, params):
+        if isinstance(params, dict):
+            return
+
+        if not isinstance(params, Sequence) or isinstance(params, (str, bytes)):
+            raise ValueError('parameters must be a sequence or a dictionary, got: {}'.format(type(params)))
+
+    def _parse_params(self, sql, params):
+        """
+        Parse %s style or ":name" style parameters.
+
+        If use :name style parameters, ``params`` must be a dictionary.
+
+        :param sql: sql statement
+        :param params: parameters (sequence or dictionary)
+        :return:
+        """
+        if not params:
+            raise ValueError('params must be `None` or a non empty sequence or dictionary, got: {}'.format(params))
+
+        orig_params = copy(params)
+        self._check_params(params)
+        if isinstance(params, dict):
+            try:
+                # convert ":param" to ? parameters
+                query = sqlparams.SQLParams('named', 'qmark')
+                operation, params = query.format(sql, params)
+            except KeyError as e:
+                key = e.args[0]
+                raise ValueError('":{}" is missing from parameters template in statement: "{}"'
+                                 '\nParameters: {}'.format(key, sql, dict(orig_params)))
+
+            # sqlparams will not check for un-consumed keyword parameters
+            # this is an error because the user is passing in arguments that are not being used by the query
+            if len(params) < len(orig_params):
+                missing = [f'":{key}"' for key in orig_params if f':{key}' not in sql]
+                raise ValueError('sql statement is missing named template paramaters:\n    ({})\n'
+                                 'given paramaters:\n    {}\n'
+                                 'in query:\n{}'.format(
+                                     ', '.join(map(str, missing)),
+                                     str(dict(orig_params)),
+                                     textwrap.indent(sql.strip(), ' '*4)))
+
+        else:
+            try:
+                # convert %s to ? parameters
+                query = sqlparams.SQLParams('format', 'qmark')
+                operation, params = query.format(sql, params)
+            except IndexError as e:
+                fmt_count = sql.count('%s')
+                raise ValueError('`params` contains incorrect number of arguments for "%s"'
+                                 'templates in query.\n'
+                                 'expected: [{}] arguments, got: [{}]'.format(fmt_count, len(params)))
+
+            # sqlparams will not check for un-consumed or un-needed positional parameters
+            extra_args = len(orig_params) - len(params)
+            if extra_args:
+                raise ValueError('`params` contains {} more elements than were consumed by query templates:\n{}\n'
+                                 'arguments given: [{}]\nunused: [{}]'.format(
+                                  extra_args,
+                                  textwrap.indent(sql.strip(), ' '*4),
+                                  ', '.join(map(str, orig_params)),
+                                  ', '.join(map(str, orig_params[len(params):]))))
+
+        return operation, params
+
     def execute(self, operation, params=None):
+        """
+        Execute a sql statement with an optional set of parameters
+
+        :param operation: Sql text
+        :param params: a sequence or dictionary of parameters
+                       Parameters can be positional templates ``%s`` or named templates ``:name``
+
+        :param operation:
+        :param params:
+        :return:
+        """
         if not self._connection_valid():
             raise Error('the connection has been closed')
 
@@ -245,14 +333,42 @@ class JdbcCursor:
 
         conn = self._connection.jdbc_connection()
 
+        # handle parameters
+        if params is not None:
+            operation, params = self._parse_params(operation, params)
+
         # prepare the statement
         self._statement = stmt = conn.prepareStatement(operation)
-
+        stmt.clearParameters()
         for column, value in enumerate(params or [], start=1):
             # note that in JDBC the first column index is 1
-            stmt.setObject(column, value)
+            if isinstance(value, str):
+                jvalue = JString(value)
+                stmt.setString(column, jvalue)
+            elif isinstance(value, float):
+                jvalue = JDouble(value)
+                stmt.setDouble(column, jvalue)
+            elif isinstance(value, int):
+                try:
+                    jvalue = JInt(value)
+                    stmt.setInt(column, jvalue)
+                except Exception:
+                    jvalue = JLong(value)
+                    stmt.setLong(column, jvalue)
+            elif isinstance(value, bool):
+                jvalue = JBoolean(value)
+                stmt.setBoolean(column, jvalue)
+            elif isinstance(value, bytes):
+                ByteArray = JArray(JByte)
+                jvalue = ByteArray(value.decode('utf-8'))
+                stmt.setBytes(column, jvalue)
+            else:
+                stmt.setObject(column, value)
 
-        has_resultset = stmt.execute()  # TODO exception handling
+        try:
+            has_resultset = stmt.execute()
+        except JClass('org.apache.hive.service.cli.HiveSQLException') as e:
+            raise ProgrammingError('Error executing statement:\n{}\n{}'.format(operation, e)) from None
 
         self._rowcount = -1
         if has_resultset:
@@ -277,16 +393,37 @@ class JdbcCursor:
                 pass
 
     def executemany(self, operation, seq_of_parameters):
-        self._reset()
-        conn = self._connection.jdbc_connection()
-        self._statement = stmt = conn.prepareStatement(operation)
-        for params in seq_of_parameters:
-            for column, value in enumerate(params or [], start=1):
-                stmt.setObject(column, value)
-            self._statement.addBatch()
-        batch_rowcounts = stmt.executeBatch()
-        self._rowcount = sum(batch_rowcounts)
-        self._reset()
+        """
+        Execute a many statements each with a different set of parameters
+
+        :param operation: Sql text
+        :param seq_of_parameters: a sequence of sequences containing parameters to pass into `operation`
+                                  Parameters can be positional templates ``%s`` or named templates ``:name``
+        :return:
+        """
+        try:
+            orig_sql = operation
+            self._reset()
+            conn = self._connection.jdbc_connection()
+            self._statement = stmt = conn.prepareStatement(operation)
+            for params in seq_of_parameters:
+                if params is not None:
+                    operation, params = self._parse_params(operation, params)
+                    for column, value in enumerate(params or [], start=1):
+                        stmt.setObject(column, value)
+                stmt.addBatch()
+            batch_rowcounts = stmt.executeBatch()
+            self._rowcount = sum(batch_rowcounts)
+            self._reset()
+        except JClass('java.sql.SQLException') as e:
+            # addBatch/executeBatch not supported
+            rowcount = 0
+            for params in seq_of_parameters:
+                self.execute(orig_sql, params)
+                if self._rowcount > 0:
+                    rowcount += self._rowcount
+
+            self._rowcount = rowcount if self._get_rowcounts else -1
 
     def fetchone(self):
         if not self._resultset_valid():

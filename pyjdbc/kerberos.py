@@ -77,6 +77,14 @@ def find_krb5_conf():
 
 
 def realm_from_principal(principal):
+    """
+    Attempt to retrieve a realm name from a principal, if the principal is fully qualified.
+
+    :param principal: A principal name: user@DOMAIN.COM
+    :type: principal: str
+    :return: realm if present, else None
+    :rtype: str
+    """
     if '@' not in principal:
         return
     else:
@@ -131,7 +139,8 @@ def configure_jaas(jaas_path=None,
     jaas_text = '\n'.join(lines)
     tempdir = tempfile.gettempdir()
     if not jaas_path:
-        jaas_path = join(tempdir, 'pyjdbc-jaas-{}.conf'.format(binascii.crc32(jaas_text)))
+        jaas_binary = jaas_text.encode('utf8', 'ignore')
+        jaas_path = join(tempdir, 'pyjdbc-jaas-{}.conf'.format(binascii.crc32(jaas_binary)))
 
     log.debug('jaas configuration: {}\n{}'.format(jaas_path, jaas_text))
 

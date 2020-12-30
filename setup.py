@@ -23,5 +23,6 @@ setup(
     packages=['pyjdbc'],
     install_requires=[
         'JPype1>=1.0.1',
+        'sqlparams>=3.0.0'
     ],
 )

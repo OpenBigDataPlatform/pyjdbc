@@ -283,7 +283,7 @@ class JdbcCursor:
             # sqlparams will not check for un-consumed keyword parameters
             # this is an error because the user is passing in arguments that are not being used by the query
             if len(params) < len(orig_params):
-                missing = [f'":{key}"' for key in orig_params if f':{key}' not in sql]
+                missing = ['":{}"'.format(key) for key in orig_params if ':{}'.format(key) not in sql]
                 raise ValueError('sql statement is missing named template paramaters:\n    ({})\n'
                                  'given paramaters:\n    {}\n'
                                  'in query:\n{}'.format(

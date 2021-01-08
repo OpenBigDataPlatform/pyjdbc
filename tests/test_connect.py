@@ -7,6 +7,7 @@ import pytest
 from pyjdbc.sqlite import connect
 
 
+@pytest.mark.connection
 class TestConnection(unittest.TestCase):
     table1 = '''
         CREATE TABLE users (
@@ -24,7 +25,7 @@ class TestConnection(unittest.TestCase):
             cursor.execute(self.table1)
 
     def test_insert_executemany(self):
-        return
+        return # TODO fix me
         stmt = "insert into users (id, name) " \
                "values (?, ?)"
         parms = (

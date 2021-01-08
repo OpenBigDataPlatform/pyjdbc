@@ -40,7 +40,9 @@ chain of classes:
 __all__ = ['kerberos_login_keytab', 'configure_jaas', 'realm_from_principal']
 
 import logging
-from os.path import join
+import os
+import stat
+from os.path import join, isfile
 import tempfile
 from jpype import JClass
 import binascii
@@ -94,10 +96,10 @@ def realm_from_principal(principal):
         return parts[-1]
 
 
-def configure_jaas(jaas_path=None,
-                   use_password=None,  # uses javax.security.auth.login.password, javax.security.auth.login.name
-                   principal=None,
+def configure_jaas(principal=None,
                    keytab=None,
+                   jaas_path=None,
+                   use_password=None,  # uses javax.security.auth.login.password, javax.security.auth.login.name
                    no_prompt=False,
                    ticket_cache=None,
                    use_ticket_cache=False):
@@ -106,13 +108,23 @@ def configure_jaas(jaas_path=None,
 
     The configuration file is saved to <temp>
 
+    On multi-user environments, in the event the file exists already and cannot be read
+    it will be written to the working directory instead of <temp>
+
+    Defaults
+        - if no arguments are passed
+        - jaas is configured to simply avoid prompting the user for username/password
+        - this behavior is the default for jaas
+        - obviously a prompt in the middle of an automated program is bad.
+
+
     :param jaas_path: file path where the jaas file will be written
     :param use_password: use the password defined in javax.security.auth.login.password
     :param principal: set the user principal to use in jaas
     :param keytab: set the user keytab to use in jaas
     :param no_prompt: disable prompting for user/password
     :param ticket_cache: use the default ticket cache
-    :return:
+    :return: returns the path of the jaas configuration
     """
     lines = []
     lines.append('com.sun.security.auth.module.Krb5LoginModule required')
@@ -138,16 +150,66 @@ def configure_jaas(jaas_path=None,
 
     jaas_text = '\n'.join(lines)
     tempdir = tempfile.gettempdir()
+
+    # if there are no unique identification properties in the config, it is generic
+    generic_config = not any((keytab, principal, ticket_cache))
+
+    jaas_paths = []
     if not jaas_path:
         jaas_binary = jaas_text.encode('utf8', 'ignore')
-        jaas_path = join(tempdir, 'pyjdbc-jaas-{}.conf'.format(binascii.crc32(jaas_binary)))
+        jaas_filename = '.pyjdbc-jaas-{}.conf'.format(binascii.crc32(jaas_binary))
+        jaas_path = join(tempdir, jaas_filename)
+        jaas_paths.extend([jaas_path, join(os.getcwd(), '.' + jaas_filename)])
+    else:
+        jaas_paths.append(jaas_path)
 
-    log.debug('jaas configuration: {}\n{}'.format(jaas_path, jaas_text))
+    del jaas_path
 
-    with open(jaas_path, 'w') as fp:
-        fp.writelines(lines)
+    log.debug('jaas configuration: {}'.format(jaas_text))
+
+    # does a jaas file already exist that we can read?
+    jaas_read_path = None
+    for idx, jaas_dest in enumerate(jaas_paths, start=1):
+        if isfile(jaas_dest):
+            log.debug('jaas configuration already exists with identical contents, skipping creation. {}'.format(
+                jaas_dest))
+            # if the file exists make sure we can actually read the file
+            try:
+                open(jaas_dest).read()
+            except (IOError, PermissionError) as e:
+                if idx >= len(jaas_paths):
+                    raise PermissionError('jaas path exists, but is not readable at {} - {}'.format(jaas_dest, e))
+            jaas_read_path = jaas_dest
+        break
+
+    # if not jaas file exists, we need to create one
+    if not jaas_read_path:
+        for idx, jaas_dest in enumerate(jaas_paths, start=1):
+            try:
+                with open(jaas_dest, 'w') as fp:
+                    log.debug('writing jaas configuration to {}'.format(jaas_dest))
+                    fp.writelines(lines)
+                jaas_read_path = jaas_dest
+
+                if generic_config:
+                    # if the configuration is generation make it readable by all
+                    os.chmod(jaas_read_path,
+                             stat.S_IRUSR |  # user read
+                             stat.S_IWUSR |  # user write
+                             stat.S_IRGRP |  # group read
+                             stat.S_IROTH)   # everyone read
+                break
+            except (IOError, PermissionError) as e:
+                if idx >= len(jaas_paths):
+                    raise PermissionError('java needs a `jaas` configuration file to configure kerberos, '
+                                          'unable to write config to: {}, write permissions are needed'.format(
+                                           jaas_paths)) from e
+                continue
 
     if not Jvm.is_running():
-        Jvm.add_argument('java.security.auth.login.config', '-Djava.security.auth.login.config={}'.format(jaas_path))
+        Jvm.add_argument('java.security.auth.login.config',
+                         '-Djava.security.auth.login.config={}'.format(jaas_read_path))
     else:
-        System.set_property('java.security.auth.login.config', jaas_path)
+        System.set_property('java.security.auth.login.config', jaas_read_path)
+
+    return jaas_read_path

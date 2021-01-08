@@ -126,7 +126,7 @@ def configure_jaas(principal=None,
     :param ticket_cache: use the default ticket cache
     :return: returns the path of the jaas configuration
     """
-    lines = []
+    lines = list()
     lines.append('com.sun.security.auth.module.Krb5LoginModule required')
     if keytab:
         lines.append('keyTab="{}"'.format(keytab))
@@ -151,6 +151,8 @@ def configure_jaas(principal=None,
     jaas_text = '\n'.join(lines)
     tempdir = tempfile.gettempdir()
 
+    log.debug('jaas configuration: {}'.format(jaas_text))
+
     # if there are no unique identification properties in the config, it is generic
     generic_config = not any((keytab, principal, ticket_cache))
 
@@ -164,8 +166,6 @@ def configure_jaas(principal=None,
         jaas_paths.append(jaas_path)
 
     del jaas_path
-
-    log.debug('jaas configuration: {}'.format(jaas_text))
 
     # does a jaas file already exist that we can read?
     jaas_read_path = None

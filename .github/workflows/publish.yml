@@ -6,7 +6,6 @@ name: Upload Python Package
 
 # this will only upload to pypi when a new release is drafted.
 # this is done through the github user interface
-# before you can draft a new release you must create a tag
 on:
   release:
     types: [created]

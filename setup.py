@@ -2,7 +2,7 @@ from setuptools import setup
 
 setup(
     name='pyjdbc',
-    version='0.2.1',
+    version='0.2.2',
     author='OpenBigDataPlatform',
     license='Apache-2.0',
     url='https://github.com/OpenBigDataPlatform/pyjdbc',

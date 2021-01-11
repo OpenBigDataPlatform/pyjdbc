@@ -57,7 +57,7 @@ class JdbcConnection:
     def close(self):
         if self._connection.isClosed():
             raise Error('Connection already closed')
-        self.jconn.close()
+        self._connection.close()
 
     def commit(self):
         # TODO exception handling
@@ -394,7 +394,7 @@ class JdbcCursor:
 
     def executemany(self, operation, seq_of_parameters):
         """
-        Execute a many statements each with a different set of parameters
+        Execute many statements each with a different set of parameters
 
         :param operation: Sql text
         :param seq_of_parameters: a sequence of sequences containing parameters to pass into `operation`
